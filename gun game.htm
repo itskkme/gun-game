@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Finger Gun | AI Shooter</title>
+
+    <!-- MediaPipe Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
+        crossorigin="anonymous"></script>
+
+    <style>
+        :root {
+            --neon-red: #ff2a6d;
+            --neon-blue: #05d9e8;
+            --neon-green: #00ff88;
+            --bg-dark: #01012b;
+            --glass: rgba(255, 255, 255, 0.05);
+        }
+
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: var(--bg-dark);
+            font-family: 'Rajdhani', sans-serif;
+            color: white;
+            user-select: none;
+        }
+
+        /* Background Grid Animation */
+        .grid-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background:
+                linear-gradient(rgba(5, 217, 232, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(5, 217, 232, 0.1) 1px, transparent 1px);
+            background-size: 50px 50px;
+            perspective: 500px;
+            transform: scale(1.5);
+            z-index: -2;
+            animation: gridMove 20s linear infinite;
+        }
+
+        @keyframes gridMove {
+            0% {
+                transform: translateY(0) rotateX(45deg);
+            }
+
+            100% {
+                transform: translateY(50px) rotateX(45deg);
+            }
+        }
+
+        .game-container {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* Canvas Layers */
+        #webcam-canvas,
+        #game-canvas {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scaleX(-1);
+            /* Mirror effect */
+            border-radius: 20px;
+            box-shadow: 0 0 50px rgba(5, 217, 232, 0.2);
+        }
+
+        #webcam-canvas {
+            width: 1280px;
+            height: 720px;
+            z-index: 1;
+            opacity: 0.4;
+            mix-blend-mode: screen;
+        }
+
+        #game-canvas {
+            width: 1280px;
+            height: 720px;
+            z-index: 2;
+        }
+
+        /* UI Overlay */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 40px;
+            box-sizing: border-box;
+        }
+
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .score-box {
+            background: var(--glass);
+            padding: 20px 40px;
+            border-radius: 4px;
+            border-left: 4px solid var(--neon-blue);
+            backdrop-filter: blur(10px);
+        }
+
+        .score-label {
+            font-size: 1.2rem;
+            color: var(--neon-blue);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .score-value {
+            font-size: 3rem;
+            font-weight: bold;
+            text-shadow: 0 0 20px var(--neon-blue);
+        }
+
+        .level-box {
+            text-align: right;
+            background: var(--glass);
+            padding: 20px 40px;
+            border-radius: 4px;
+            border-right: 4px solid var(--neon-green);
+        }
+
+        .status-msg {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 1.5rem;
+            color: rgba(255, 255, 255, 0.7);
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px 30px;
+            border-radius: 30px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            pointer-events: auto;
+        }
+
+        /* Start Screen */
+        .overlay-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(1, 1, 43, 0.9);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 0.5s;
+        }
+
+        .overlay-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        h1 {
+            font-size: 5rem;
+            margin: 0;
+            /* Gradient Text */
+            background: linear-gradient(to right, var(--neon-blue), #fff, var(--neon-red));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 50px rgba(5, 217, 232, 0.5);
+            font-style: italic;
+        }
+
+        .instructions {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 1.5rem;
+            line-height: 2rem;
+            color: #ccc;
+        }
+
+        .key-highlight {
+            color: var(--neon-blue);
+            font-weight: bold;
+        }
+
+        button.start-btn {
+            margin-top: 50px;
+            padding: 20px 60px;
+            font-size: 2rem;
+            background: transparent;
+            color: var(--neon-red);
+            border: 2px solid var(--neon-red);
+            border-radius: 50px;
+            cursor: pointer;
+            text-transform: uppercase;
+            font-weight: bold;
+            box-shadow: 0 0 20px rgba(255, 42, 109, 0.2);
+            transition: all 0.3s;
+            pointer-events: auto;
+        }
+
+        button.start-btn:hover {
+            background: var(--neon-red);
+            color: white;
+            box-shadow: 0 0 50px rgba(255, 42, 109, 0.6);
+            transform: scale(1.1);
+        }
+
+        /* Loading Spinner */
+        .loader {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255, 255, 255, 0.1);
+            border-top: 5px solid var(--neon-blue);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-top: 30px;
+            display: none;
+        }
+
+        @keyframes spin {
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        #video-source {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="grid-bg"></div>
+
+    <div class="game-container">
+        <!-- Render Layers -->
+        <video id="video-source" playsinline></video>
+        <canvas id="webcam-canvas"></canvas>
+        <canvas id="game-canvas"></canvas>
+
+        <!-- UI -->
+        <div class="ui-layer">
+            <div class="hud-top">
+                <div class="score-box">
+                    <div class="score-label">Score</div>
+                    <div class="score-value" id="score-display">0</div>
+                </div>
+                <div class="level-box">
+                    <div class="score-label">Level</div>
+                    <div class="score-value" id="level-display">1</div>
+                </div>
+            </div>
+            <div class="status-msg" id="status-display">Initializing AI...</div>
+        </div>
+    </div>
+
+    <!-- Start Overlay -->
+    <div class="overlay-screen" id="start-screen">
+        <h1>NEON GUNNER</h1>
+        <div class="instructions">
+            Make a <span class="key-highlight">FINGER GUN</span> gesture to aim.<br>
+            <span class="key-highlight">LOWER YOUR THUMB</span> to fire.<br>
+            Hit the floating orbs before they disappear!
+        </div>
+        <div class="loader" id="loader"></div>
+        <button class="start-btn" id="start-btn">ENGAGE SYSTEM</button>
+    </div>
+
+    <!-- Game Logic -->
+    <script>
+        // --- Configuration ---
+        const CAM_WIDTH = 1280;
+        const CAM_HEIGHT = 720;
+        const TRIGGER_THRESHOLD = 0.08; // Distance between thumb tip and index base
+
+        // --- DOM Elements ---
+        const videoElement = document.getElementById('video-source');
+        const webcamCanvas = document.getElementById('webcam-canvas');
+        const webcamCtx = webcamCanvas.getContext('2d');
+        const gameCanvas = document.getElementById('game-canvas');
+        const gameCtx = gameCanvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score-display');
+        const levelDisplay = document.getElementById('level-display');
+        const statusDisplay = document.getElementById('status-display');
+        const startScreen = document.getElementById('start-screen');
+        const startBtn = document.getElementById('start-btn');
+        const loader = document.getElementById('loader');
+
+        // --- Game State ---
+        let gameState = {
+            isPlaying: false,
+            score: 0,
+            level: 1,
+            targets: [],
+            particles: [],
+            lastShotTime: 0,
+            frame: 0
+        };
+
+        let handState = {
+            isDetected: false,
+            isGun: false,
+            pixelX: 0,
+            pixelY: 0,
+            isFiring: false
+        };
+
+        // --- Audio Context ---
+        // --- Audio Context ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+
+        // Procedural Audio Generators
+        const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 2, audioCtx.sampleRate);
+        const noiseData = noiseBuffer.getChannelData(0);
+        for (let i = 0; i < noiseBuffer.length; i++) {
+            noiseData[i] = Math.random() * 2 - 1;
+        }
+
+        let musicOsc;
+        let musicGain;
+        let musicNoteIndex = 0;
+        const bassLine = [110, 110, 110, 82, 110, 110, 110, 146]; // Bass notes (A2, A2, A2, E2...)
+
+        function startMusic() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            if (musicOsc) return; // Already playing
+
+            musicOsc = audioCtx.createOscillator();
+            musicGain = audioCtx.createGain();
+
+            musicOsc.type = 'square';
+            musicOsc.frequency.value = 110;
+            musicGain.gain.value = 0.05;
+
+            // Lowpass filter for bass
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = 400;
+
+            musicOsc.connect(filter);
+            filter.connect(musicGain);
+            musicGain.connect(audioCtx.destination);
+            musicOsc.start();
+
+            // Sequencer Loop
+            setInterval(() => {
+                if (!gameState.isPlaying) return;
+                const note = bassLine[musicNoteIndex % bassLine.length];
+                musicOsc.frequency.setValueAtTime(note, audioCtx.currentTime);
+                musicGain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                musicGain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1); // Plucky
+                musicNoteIndex++;
+            }, 250); // 120ms tempo
+        }
+
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            if (type === 'shoot') {
+                // Laser Shot
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.3);
+            } else if (type === 'hit') {
+                // Explosion Noise
+                const source = audioCtx.createBufferSource();
+                source.buffer = noiseBuffer;
+                const gain = audioCtx.createGain();
+                const filter = audioCtx.createBiquadFilter();
+
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(1000, audioCtx.currentTime);
+                filter.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.5);
+
+                gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+
+                source.connect(filter);
+                filter.connect(gain);
+                gain.connect(audioCtx.destination);
+                source.start();
+                source.stop(audioCtx.currentTime + 0.5);
+            }
+        }
+
+        // --- vector math helpers ---
+        function dist(a, b) {
+            return Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));
+        }
+
+        // --- MediaPipe Init ---
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+
+        hands.onResults(onHandResults);
+
+        const camera = new Camera(videoElement, {
+            onFrame: async () => { await hands.send({ image: videoElement }); },
+            width: CAM_WIDTH,
+            height: CAM_HEIGHT
+        });
+
+        // --- Gesture Recognition ---
+        function onHandResults(results) {
+            // Draw Webcam Feed
+            webcamCanvas.width = CAM_WIDTH;
+            webcamCanvas.height = CAM_HEIGHT;
+            gameCanvas.width = CAM_WIDTH;
+            gameCanvas.height = CAM_HEIGHT;
+
+            webcamCtx.save();
+            webcamCtx.clearRect(0, 0, CAM_WIDTH, CAM_HEIGHT);
+            webcamCtx.drawImage(results.image, 0, 0, CAM_WIDTH, CAM_HEIGHT);
+
+            handState.isDetected = false;
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+                handState.isDetected = true;
+
+                // Draw Skeleton
+                drawConnectors(webcamCtx, landmarks, HAND_CONNECTIONS, { color: '#05d9e8', lineWidth: 2 });
+                drawLandmarks(webcamCtx, landmarks, { color: '#ff2a6d', lineWidth: 1, radius: 3 });
+
+                // Logic: Index Finger Tip (8) is aiming point
+                // Thumb Tip (4) vs Index MCP (5) distance is trigger
+
+                const indexTip = landmarks[8];
+                const indexMCP = landmarks[5];
+                const thumbTip = landmarks[4];
+                const middleTip = landmarks[12];
+                const ringTip = landmarks[16];
+                const pinkyTip = landmarks[20];
+                const wrist = landmarks[0];
+
+                // Coordinates (0-1) convert to canvas pixels
+                // Note: Canvas is mirrored (scaleX(-1)), but coordinates from MP are normalized 0-1.
+                // When we draw on mirrored canvas, x=0 is left visually, but in MP x=0 is left of image.
+                // Since we mirrored the canvas with CSS, drawing at x=100 appears at right.
+                // MP coordinates: x increases left-to-right of the original image (user's right to left).
+                // Let's just map standard.
+
+                handState.pixelX = indexTip.x * CAM_WIDTH;
+                handState.pixelY = indexTip.y * CAM_HEIGHT;
+
+                // Check "Gun" Pose: Index extended, Middle/Ring/Pinky curled
+                // Simple check: Index Tip Y is above Index PIP? No, simpler: distance from wrist.
+                // Extended: Tip further from wrist than PIP. Curled: Tip closer.
+
+                const isIndexExtended = dist(indexTip, wrist) > dist(landmarks[6], wrist); // 6 is Index PIP
+                const isMiddleCurled = dist(middleTip, wrist) < dist(landmarks[10], wrist); // 10 is Middle PIP
+                const isRingCurled = dist(ringTip, wrist) < dist(landmarks[14], wrist);
+                const isPinkyCurled = dist(pinkyTip, wrist) < dist(landmarks[18], wrist);
+
+                if (isIndexExtended && isMiddleCurled && isRingCurled && isPinkyCurled) {
+                    handState.isGun = true;
+                    statusDisplay.textContent = "GUN READY";
+                    statusDisplay.style.color = "#00ff88";
+
+                    // CHECK TRIGGER
+                    // Distance between Thumb Tip (4) and Middle MCP (9) or Index MCP (5)
+                    // When thumb is up ("cocked"), distance is high. When down, low.
+
+                    const triggerDist = dist(thumbTip, indexMCP);
+                    // Visualize trigger threshold
+                    // console.log(triggerDist); 
+
+                    if (triggerDist < TRIGGER_THRESHOLD) {
+                        if (!handState.isFiring) {
+                            fireBullet();
+                            handState.isFiring = true;
+                        }
+                    } else {
+                        handState.isFiring = false;
+                    }
+
+                } else {
+                    handState.isGun = false;
+                    statusDisplay.textContent = "FORM HANDGUN GESTURE";
+                    statusDisplay.style.color = "#ff2a6d";
+                }
+            } else {
+                statusDisplay.textContent = "NO HAND DETECTED";
+                statusDisplay.style.color = "#ccc";
+            }
+
+            webcamCtx.restore();
+        }
+
+        // --- Game Logic ---
+        function fireBullet() {
+            if (!gameState.isPlaying) return;
+
+            // Cooldown check
+            const now = Date.now();
+            if (now - gameState.lastShotTime < 200) return; // 200ms fire rate
+            gameState.lastShotTime = now;
+
+            playSound('shoot');
+
+            // Visual Muzzle Flash
+            createExplosion(handState.pixelX, handState.pixelY, 10, '#fff');
+
+            // Cast Ray / Hit Check
+            // Simple point collision for now
+            let hit = false;
+            for (let i = gameState.targets.length - 1; i >= 0; i--) {
+                const t = gameState.targets[i];
+                const d = Math.hypot(t.x - handState.pixelX, t.y - handState.pixelY);
+
+                if (d < t.radius + 20) { // +20 hitbox forgiveness
+                    // HIT!
+                    createExplosion(t.x, t.y, 30, t.color);
+                    gameState.targets.splice(i, 1);
+                    gameState.score += 100;
+                    playSound('hit');
+                    hit = true;
+
+                    // Level Up logic
+                    if (gameState.score % 1000 === 0) {
+                        gameState.level++;
+                    }
+                }
+            }
+
+            // Update DOM
+            scoreDisplay.textContent = gameState.score;
+            levelDisplay.textContent = gameState.level;
+        }
+
+        function createExplosion(x, y, size, color) {
+            for (let i = 0; i < 15; i++) {
+                gameState.particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10,
+                    life: 1.0,
+                    color: color,
+                    size: Math.random() * size * 0.5
+                });
+            }
+        }
+
+        // --- Entity Management ---
+        class Target {
+            constructor() {
+                this.radius = 30 + Math.random() * 20;
+                this.x = Math.random() * (CAM_WIDTH - 100) + 50;
+                this.y = Math.random() * (CAM_HEIGHT - 100) + 50;
+                this.vx = (Math.random() - 0.5) * (2 + gameState.level);
+                this.vy = (Math.random() - 0.5) * (2 + gameState.level);
+                this.life = 200; // Frames before despaen
+                this.color = `hsl(${Math.random() * 60 + 300}, 100%, 50%)`; // Pink/Purple range
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Bounce
+                if (this.x < 0 || this.x > CAM_WIDTH) this.vx *= -1;
+                if (this.y < 0 || this.y > CAM_HEIGHT) this.vy *= -1;
+
+                this.life--;
+            }
+
+            draw(ctx) {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = this.color;
+                ctx.fill();
+                ctx.closePath();
+                ctx.shadowBlur = 0;
+
+                // Life ring
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius + 5, 0, Math.PI * 2 * (this.life / 200));
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+        }
+
+        // --- Loops ---
+        function gameLoop() {
+            if (!gameState.isPlaying) return;
+
+            gameCtx.clearRect(0, 0, CAM_WIDTH, CAM_HEIGHT);
+
+            // Spawn Targets
+            if (gameState.frame % (60 - Math.min(50, gameState.level * 2)) === 0) {
+                gameState.targets.push(new Target());
+            }
+
+            // Update Targets
+            for (let i = gameState.targets.length - 1; i >= 0; i--) {
+                const t = gameState.targets[i];
+                t.update();
+                t.draw(gameCtx);
+                if (t.life <= 0) gameState.targets.splice(i, 1);
+            }
+
+            // Update Particles
+            for (let i = gameState.particles.length - 1; i >= 0; i--) {
+                const p = gameState.particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.05;
+
+                gameCtx.beginPath();
+                gameCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                gameCtx.fillStyle = p.color;
+                gameCtx.globalAlpha = p.life;
+                gameCtx.fill();
+                gameCtx.globalAlpha = 1;
+
+                if (p.life <= 0) gameState.particles.splice(i, 1);
+            }
+
+            // Draw Crosshair on Fingers
+            if (handState.isDetected) {
+                gameCtx.beginPath();
+                gameCtx.arc(handState.pixelX, handState.pixelY, 20, 0, Math.PI * 2);
+                gameCtx.strokeStyle = handState.isGun ? '#00ff88' : '#ff0000';
+                gameCtx.lineWidth = 3;
+                gameCtx.stroke();
+
+                // Crosshair lines
+                gameCtx.beginPath();
+                gameCtx.moveTo(handState.pixelX - 30, handState.pixelY);
+                gameCtx.lineTo(handState.pixelX + 30, handState.pixelY);
+                gameCtx.moveTo(handState.pixelX, handState.pixelY - 30);
+                gameCtx.lineTo(handState.pixelX, handState.pixelY + 30);
+                gameCtx.stroke();
+            }
+
+            gameState.frame++;
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Start Logic ---
+        startBtn.addEventListener('click', async () => {
+            startBtn.style.display = 'none';
+            loader.style.display = 'block';
+
+            try {
+                // Ensure audio context is ready on user interaction
+                if (audioCtx.state === 'suspended') {
+                    await audioCtx.resume();
+                }
+
+                await camera.start();
+                startScreen.classList.add('hidden');
+                gameState.isPlaying = true;
+                startMusic();
+                gameLoop();
+            } catch (e) {
+                alert("Camera Access Denied or Error: " + e.message);
+                loader.style.display = 'none';
+                startBtn.style.display = 'block';
+            }
+        });
+
+    </script>
+</body>
+
+</html>

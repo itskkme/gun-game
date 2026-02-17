@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AuraPiano Pro | Immersive AI Instrument</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+
+    <style>
+        :root {
+            --neon-blue: #00f2ff;
+            --neon-pink: #ff00e5;
+            --glass: rgba(255, 255, 255, 0.08);
+            /* Updated dimensions */
+            --cam-width: 800px;
+            --cam-height: 450px;
+            --key-width: 50px; /* Reduced from 60px */
+            --key-height: 180px; /* Reduced from 220px */
+        }
+
+        body, html {
+            margin: 0; padding: 0;
+            width: 100%; height: 100%;
+            overflow: hidden;
+            background: #05050a;
+            font-family: 'Inter', system-ui, sans-serif;
+            color: white;
+        }
+
+        .bg-glow {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at 50% 50%, #16213e 0%, #020205 100%);
+            z-index: -1;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            gap: 20px;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin: 0;
+            letter-spacing: 8px;
+            text-transform: uppercase;
+            background: linear-gradient(to right, var(--neon-blue), #fff, var(--neon-pink));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 15px rgba(0, 242, 255, 0.4));
+        }
+
+        /* Expanded Video Wrapper */
+        .video-wrapper {
+            position: relative;
+            width: var(--cam-width);
+            height: var(--cam-height);
+            border-radius: 24px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 0 40px rgba(0,0,0,0.8);
+            background: #000;
+        }
+
+        #output_canvas {
+            transform: scaleX(-1);
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Slimmer Piano UI */
+        #piano-container {
+            display: flex;
+            gap: 8px;
+            padding: 20px 30px;
+            background: var(--glass);
+            border-radius: 100px; /* Pill shape */
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .key {
+            width: var(--key-width);
+            height: var(--key-height);
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 25px;
+            transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 15px;
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.2);
+            user-select: none;
+        }
+
+        .key.active {
+            background: var(--neon-pink);
+            box-shadow: 0 0 40px var(--neon-pink);
+            transform: scale(0.95);
+            color: white;
+            border-color: white;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+        }
+
+        button {
+            padding: 10px 30px;
+            background: transparent;
+            border: 1px solid var(--neon-blue);
+            color: var(--neon-blue);
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+
+        button:hover {
+            background: var(--neon-blue);
+            color: black;
+        }
+
+        #input_video { display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="bg-glow"></div>
+
+    <div class="container">
+        <header>
+            <h1>KK's AI Piano</h1>
+        </header>
+
+        <div class="video-wrapper">
+            <video id="input_video"></video>
+            <canvas id="output_canvas"></canvas>
+        </div>
+
+        <div id="piano-container">
+            <div class="key" data-note="C4">C</div>
+            <div class="key" data-note="D4">D</div>
+            <div class="key" data-note="E4">E</div>
+            <div class="key" data-note="F4">F</div>
+            <div class="key" data-note="G4">G</div>
+            <div class="key" data-note="A4">A</div>
+            <div class="key" data-note="B4">B</div>
+            <div class="key" data-note="C5">C</div>
+            <div class="key" data-note="D5">D</div>
+            <div class="key" data-note="E5">E</div>
+        </div>
+
+        <div class="controls">
+            <button id="start-btn">Start AI Engine</button>
+        </div>
+    </div>
+
+    <script>
+        const videoElement = document.getElementById('input_video');
+        const canvasElement = document.getElementById('output_canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const pianoKeys = document.querySelectorAll('.key');
+        const startBtn = document.getElementById('start-btn');
+
+        let audioCtx = null;
+        const fingerStates = { 4:null, 8: null, 12: null, 16: null, 20: null };
+
+        function initAudio() {
+            if (audioCtx) return;
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        function playNote(freq) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine'; // Softer, cleaner sound
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.8);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.8);
+        }
+
+        const noteFreqs = {
+            'C4': 261.63, 'D4': 293.66, 'E4': 329.63, 'F4': 349.23,
+            'G4': 392.00, 'A4': 440.00, 'B4': 493.88, 'C5': 523.25,
+            'D5': 587.33, 'E5': 659.25
+        };
+
+        function onResults(results) {
+            canvasElement.width = videoElement.videoWidth;
+            canvasElement.height = videoElement.videoHeight;
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            if (results.multiHandLandmarks) {
+                for (const landmarks of results.multiHandLandmarks) {
+                    drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00f2ff', lineWidth: 2});
+                    drawLandmarks(canvasCtx, landmarks, {color: '#ff00e5', lineWidth: 1, radius: 2});
+
+                    [4, 8, 12, 16, 20].forEach(index => {
+                        const tip = landmarks[index];
+                        // X is mirrored, Y threshold is set to bottom 30% of the screen
+                        const x = 1 - tip.x;
+                        const y = tip.y;
+
+                        if (y > 0.7) { // Only trigger in the lower "strike zone"
+                            const keyCount = pianoKeys.length;
+                            const keyIdx = Math.floor(x * keyCount);
+                            
+                            if (keyIdx >= 0 && keyIdx < keyCount) {
+                                const keyEl = pianoKeys[keyIdx];
+                                if (fingerStates[index] !== keyIdx) {
+                                    triggerKey(keyEl, keyEl.getAttribute('data-note'));
+                                    fingerStates[index] = keyIdx;
+                                }
+                            }
+                        } else {
+                            fingerStates[index] = null;
+                        }
+                    });
+                }
+            }
+            canvasCtx.restore();
+        }
+
+        function triggerKey(el, note) {
+            el.classList.add('active');
+            playNote(noteFreqs[note]);
+            setTimeout(() => el.classList.remove('active'), 150);
+        }
+
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.6,
+            minTrackingConfidence: 0.6
+        });
+
+        hands.onResults(onResults);
+
+        const camera = new Camera(videoElement, {
+            onFrame: async () => { await hands.send({image: videoElement}); },
+            width: 1280,
+            height: 720
+        });
+
+        startBtn.addEventListener('click', () => {
+            initAudio();
+            camera.start();
+            startBtn.style.display = 'none';
+        });
+    </script>
+</body>
+</html>
