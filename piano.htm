@@ -1,13 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AuraPiano Pro | Immersive AI Instrument</title>
-    
+
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
+        crossorigin="anonymous"></script>
 
     <style>
         :root {
@@ -17,13 +19,18 @@
             /* Updated dimensions */
             --cam-width: 800px;
             --cam-height: 450px;
-            --key-width: 50px; /* Reduced from 60px */
-            --key-height: 180px; /* Reduced from 220px */
+            --key-width: 50px;
+            /* Reduced from 60px */
+            --key-height: 180px;
+            /* Reduced from 220px */
         }
 
-        body, html {
-            margin: 0; padding: 0;
-            width: 100%; height: 100%;
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
             overflow: hidden;
             background: #05050a;
             font-family: 'Inter', system-ui, sans-serif;
@@ -31,7 +38,11 @@
         }
 
         .bg-glow {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             background: radial-gradient(circle at 50% 50%, #16213e 0%, #020205 100%);
             z-index: -1;
         }
@@ -52,6 +63,7 @@
             text-transform: uppercase;
             background: linear-gradient(to right, var(--neon-blue), #fff, var(--neon-pink));
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
             filter: drop-shadow(0 0 15px rgba(0, 242, 255, 0.4));
         }
@@ -63,8 +75,8 @@
             height: var(--cam-height);
             border-radius: 24px;
             overflow: hidden;
-            border: 1px solid rgba(255,255,255,0.1);
-            box-shadow: 0 0 40px rgba(0,0,0,0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
             background: #000;
         }
 
@@ -81,9 +93,10 @@
             gap: 8px;
             padding: 20px 30px;
             background: var(--glass);
-            border-radius: 100px; /* Pill shape */
+            border-radius: 100px;
+            /* Pill shape */
             backdrop-filter: blur(20px);
-            border: 1px solid rgba(255,255,255,0.1);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .key {
@@ -98,7 +111,7 @@
             justify-content: center;
             padding-bottom: 15px;
             font-size: 0.8rem;
-            color: rgba(255,255,255,0.2);
+            color: rgba(255, 255, 255, 0.2);
             user-select: none;
         }
 
@@ -131,13 +144,288 @@
             color: black;
         }
 
-        #input_video { display: none; }
+        #input_video {
+            display: none;
+        }
+
+        /* ── Home page overlay ── */
+        #home-overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 28px;
+            background: radial-gradient(circle at 50% 40%, #0d1b3e 0%, #020205 100%);
+            z-index: 100;
+            transition: opacity 0.6s ease, visibility 0.6s;
+        }
+
+        #home-overlay.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        #home-overlay h1 {
+            font-size: 3rem;
+            letter-spacing: 10px;
+            text-transform: uppercase;
+            background: linear-gradient(to right, var(--neon-blue), #fff, var(--neon-pink));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 20px rgba(0, 242, 255, 0.5));
+            margin: 0;
+        }
+
+        #home-overlay p {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 1rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin: 0;
+        }
+
+        #home-start-btn {
+            padding: 14px 48px;
+            background: transparent;
+            border: 1px solid var(--neon-blue);
+            color: var(--neon-blue);
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1rem;
+            letter-spacing: 2px;
+            transition: 0.3s;
+            text-transform: uppercase;
+        }
+
+        #home-start-btn:hover {
+            background: var(--neon-blue);
+            color: #000;
+            box-shadow: 0 0 30px var(--neon-blue);
+        }
+
+        /* ── Circular webcam preview ── */
+        #webcam-circle {
+            position: fixed;
+            bottom: 28px;
+            left: 28px;
+            width: 240px;
+            height: 240px;
+            border-radius: 50%;
+            overflow: hidden;
+            border: 3px solid var(--neon-blue);
+            box-shadow: 0 0 20px var(--neon-blue), 0 0 50px rgba(0, 242, 255, 0.3);
+            z-index: 200;
+            background: #000;
+            transition: opacity 0.6s ease, visibility 0.6s;
+        }
+
+        #webcam-circle.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        #webcam-circle video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+
+        /* Animated ring pulse */
+        #webcam-circle::after {
+            content: '';
+            position: absolute;
+            inset: -4px;
+            border-radius: 50%;
+            border: 2px solid var(--neon-pink);
+            animation: pulse-ring 2s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        @keyframes pulse-ring {
+
+            0%,
+            100% {
+                opacity: 0.3;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 1;
+                transform: scale(1.06);
+            }
+        }
+
+        /* ════════════════════════════════════
+           RESPONSIVE  –  Tablet & Mobile
+           ════════════════════════════════════ */
+
+        /* Fluid video wrapper by default */
+        .video-wrapper {
+            max-width: var(--cam-width);
+            width: 95vw;
+        }
+
+        /* ── Tablet (≤ 900px) ── */
+        @media (max-width: 900px) {
+            :root {
+                --cam-width: 95vw;
+                --cam-height: calc(95vw * 9 / 16);
+                --key-width: 38px;
+                --key-height: 130px;
+            }
+
+            header h1 {
+                font-size: 1.8rem;
+                letter-spacing: 5px;
+            }
+
+            #home-overlay h1 {
+                font-size: 2.2rem;
+                letter-spacing: 7px;
+            }
+
+            #webcam-circle {
+                width: 180px;
+                height: 180px;
+                bottom: 20px;
+                left: 20px;
+            }
+
+            #piano-container {
+                padding: 14px 18px;
+                gap: 5px;
+                border-radius: 60px;
+                overflow-x: auto;
+            }
+        }
+
+        /* ── Mobile (≤ 600px) ── */
+        @media (max-width: 600px) {
+
+            body,
+            html {
+                overflow-y: auto;
+                overflow-x: hidden;
+            }
+
+            :root {
+                --cam-width: 100vw;
+                --cam-height: calc(100vw * 9 / 16);
+                --key-width: 28px;
+                --key-height: 100px;
+            }
+
+            .container {
+                gap: 14px;
+                height: auto;
+                min-height: 100vh;
+                justify-content: flex-start;
+                padding-top: 24px;
+            }
+
+            header h1 {
+                font-size: 1.3rem;
+                letter-spacing: 3px;
+            }
+
+            .video-wrapper {
+                width: 100vw;
+                max-width: 100vw;
+                border-radius: 0;
+            }
+
+            #piano-container {
+                padding: 10px 14px;
+                gap: 4px;
+                border-radius: 40px;
+                overflow-x: auto;
+                max-width: 95vw;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .key {
+                font-size: 0.65rem;
+                padding-bottom: 10px;
+                border-radius: 16px;
+            }
+
+            #home-overlay h1 {
+                font-size: 1.6rem;
+                letter-spacing: 4px;
+                text-align: center;
+                padding: 0 16px;
+            }
+
+            #home-overlay p {
+                font-size: 0.75rem;
+                letter-spacing: 2px;
+                text-align: center;
+                padding: 0 16px;
+            }
+
+            #home-start-btn {
+                padding: 12px 32px;
+                font-size: 0.9rem;
+            }
+
+            #webcam-circle {
+                width: 130px;
+                height: 130px;
+                bottom: 16px;
+                left: 16px;
+            }
+        }
+
+        /* ── Small phones (≤ 380px) ── */
+        @media (max-width: 380px) {
+            :root {
+                --key-width: 22px;
+                --key-height: 85px;
+            }
+
+            #home-overlay h1 {
+                font-size: 1.2rem;
+            }
+
+            header h1 {
+                font-size: 1.1rem;
+            }
+
+            #webcam-circle {
+                width: 100px;
+                height: 100px;
+                bottom: 12px;
+                left: 12px;
+            }
+        }
     </style>
+
 </head>
+
 <body>
 
     <div class="bg-glow"></div>
 
+    <!-- ══ HOME PAGE OVERLAY ══ -->
+    <div id="home-overlay">
+        <h1>KK's AI Piano</h1>
+        <p>Gesture-powered &nbsp;·&nbsp; AI-driven &nbsp;·&nbsp; Immersive</p>
+        <button id="home-start-btn">&#9654;&nbsp; Start AI Engine</button>
+    </div>
+
+    <!-- ══ CIRCULAR WEBCAM PREVIEW (home page only) ══ -->
+    <div id="webcam-circle">
+        <video id="webcam-preview" autoplay muted playsinline></video>
+    </div>
+
+    <!-- ══ MAIN PIANO INTERFACE ══ -->
     <div class="container">
         <header>
             <h1>KK's AI Piano</h1>
@@ -162,7 +450,7 @@
         </div>
 
         <div class="controls">
-            <button id="start-btn">Start AI Engine</button>
+            <button id="start-btn" style="display:none">Start AI Engine</button>
         </div>
     </div>
 
@@ -174,7 +462,7 @@
         const startBtn = document.getElementById('start-btn');
 
         let audioCtx = null;
-        const fingerStates = { 4:null, 8: null, 12: null, 16: null, 20: null };
+        const fingerStates = { 4: null, 8: null, 12: null, 16: null, 20: null };
 
         function initAudio() {
             if (audioCtx) return;
@@ -210,8 +498,8 @@
 
             if (results.multiHandLandmarks) {
                 for (const landmarks of results.multiHandLandmarks) {
-                    drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00f2ff', lineWidth: 2});
-                    drawLandmarks(canvasCtx, landmarks, {color: '#ff00e5', lineWidth: 1, radius: 2});
+                    drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00f2ff', lineWidth: 2 });
+                    drawLandmarks(canvasCtx, landmarks, { color: '#ff00e5', lineWidth: 1, radius: 2 });
 
                     [4, 8, 12, 16, 20].forEach(index => {
                         const tip = landmarks[index];
@@ -222,7 +510,7 @@
                         if (y > 0.7) { // Only trigger in the lower "strike zone"
                             const keyCount = pianoKeys.length;
                             const keyIdx = Math.floor(x * keyCount);
-                            
+
                             if (keyIdx >= 0 && keyIdx < keyCount) {
                                 const keyEl = pianoKeys[keyIdx];
                                 if (fingerStates[index] !== keyIdx) {
@@ -259,11 +547,40 @@
         hands.onResults(onResults);
 
         const camera = new Camera(videoElement, {
-            onFrame: async () => { await hands.send({image: videoElement}); },
+            onFrame: async () => { await hands.send({ image: videoElement }); },
             width: 1280,
             height: 720
         });
 
+        // ── Circular webcam preview on home page ──
+        const webcamPreview = document.getElementById('webcam-preview');
+        const webcamCircle = document.getElementById('webcam-circle');
+        const homeOverlay = document.getElementById('home-overlay');
+        const homeStartBtn = document.getElementById('home-start-btn');
+
+        // Start the small circle preview immediately
+        navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+            .then(stream => { webcamPreview.srcObject = stream; })
+            .catch(() => { webcamCircle.style.display = 'none'; });
+
+        // When user clicks Start AI Engine on the home page
+        homeStartBtn.addEventListener('click', () => {
+            // Hide home overlay & webcam circle
+            homeOverlay.classList.add('hidden');
+            webcamCircle.classList.add('hidden');
+
+            // Stop the preview stream (MediaPipe will take over)
+            if (webcamPreview.srcObject) {
+                webcamPreview.srcObject.getTracks().forEach(t => t.stop());
+                webcamPreview.srcObject = null;
+            }
+
+            // Start the full AI engine
+            initAudio();
+            camera.start();
+        });
+
+        // Legacy start button (hidden, kept for compatibility)
         startBtn.addEventListener('click', () => {
             initAudio();
             camera.start();
@@ -271,4 +588,5 @@
         });
     </script>
 </body>
+
 </html>
